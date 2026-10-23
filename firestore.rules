@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // بيانات المستخدم (الإيميل + المفتاح العام + كود الشريك).
+    // أي حد مسجّل يقدر يقرا مستخدم لو عارف الـ uid بتاعه، لكن مفيش listing.
+    match /users/{uid} {
+      allow get: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // غرفة الشات: الاتنين بس.
+    match /chats/{chatId} {
+      allow read: if request.auth != null
+        && request.auth.uid in resource.data.members;
+
+      allow create: if request.auth != null
+        && request.resource.data.members.size() == 2
+        && request.auth.uid in request.resource.data.members
+        && chatId == request.resource.data.members[0] + '_' + request.resource.data.members[1];
+
+      allow update: if request.auth != null
+        && request.auth.uid in resource.data.members
+        && request.resource.data.members == resource.data.members;
+
+      match /messages/{messageId} {
+        function isMember() {
+          return request.auth != null
+            && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+        }
+
+        allow read: if isMember();
+
+        allow create: if isMember()
+          && request.resource.data.sender == request.auth.uid;
+
+        // صاحب الرسالة يعدّل/يحذف. الطرف التاني يقدر يضيف ريأكشن بس.
+        allow update: if isMember()
+          && request.resource.data.sender == resource.data.sender
+          && (
+            resource.data.sender == request.auth.uid
+            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+          );
+
+        allow delete: if false;
+      }
+    }
+  }
+}

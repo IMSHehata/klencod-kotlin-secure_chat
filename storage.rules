@@ -1,0 +1,16 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // كل الملفات هنا مشفّرة (ciphertext) قبل الرفع. الوصول للاتنين بس.
+    match /chats/{chatId}/{allPaths=**} {
+      allow read, delete: if request.auth != null
+        && request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.members;
+
+      allow create: if request.auth != null
+        && request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.members
+        && request.resource.size < 30 * 1024 * 1024;
+
+      allow update: if false;
+    }
+  }
+}
